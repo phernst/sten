@@ -5,7 +5,7 @@
 #include <iostream>
 #include <memory>
 #include <numeric>
-#include <variant>
+#include <optional>
 #include <vector>
 
 namespace sten
@@ -14,45 +14,35 @@ namespace sten
 namespace indexing
 {
 
-namespace detail
-{
-struct NoneType {
-};
-} // namespace detail
-
-constexpr static detail::NoneType None{};
+constexpr static auto None = std::nullopt;
 
 struct Slice {
-    using Member = std::variant<detail::NoneType, std::int64_t>;
+    using Member = std::optional<std::int64_t>;
     Member start{None};
     Member stop{None};
     Member step{None};
 
     [[nodiscard]] constexpr Slice apply(const Slice& other) const
     {
-        constexpr auto isNone = [](const Member& member) {
-            return std::holds_alternative<detail::NoneType>(member);
+        constexpr auto toStepInt = [](const Member& member) {
+            return member.value_or(1);
+        };
+        constexpr auto toStartInt = [](const Member& member) {
+            return member.value_or(0);
+        };
+        constexpr auto toStopInt = [](const Member& member) {
+            return member.value_or(0);
         };
 
-        constexpr auto toStepInt = [isNone](const Member& member) {
-            return isNone(member) ? 1 : std::get<std::int64_t>(member);
-        };
-        constexpr auto toStartInt = [isNone](const Member& member) {
-            return isNone(member) ? 0 : std::get<std::int64_t>(member);
-        };
-        constexpr auto toStopInt = [isNone](const Member& member) {
-            return isNone(member) ? 0 : std::get<std::int64_t>(member);
-        };
-
-        const auto newStep = isNone(step) && isNone(other.step)
-                                 ? Member{None} // both None -> None
+        const auto newStep = (!step && !other.step)
+                                 ? None
                                  : Member{toStepInt(step) * toStepInt(other.step)};
-        const auto newStart = isNone(start) && isNone(other.start)
-                                  ? Member{None}
+        const auto newStart = (!start && !other.start)
+                                  ? None
                                   : Member{toStartInt(start) + toStepInt(step) * toStartInt(other.start)};
-        const auto newStop = !isNone(other.stop)
-                                 ? Member{toStartInt(start) + toStepInt(step) * toStopInt(other.stop)}
-                                 : Member{stop};
+        const auto newStop = other.stop.has_value()
+                                 ? toStartInt(start) + toStepInt(step) * toStopInt(other.stop)
+                                 : stop;
         return {newStart, newStop, newStep};
     }
 };
@@ -83,24 +73,16 @@ public:
             cbegin(m_dimensions), cend(m_dimensions), cbegin(indices),
             begin(newDimensions),
             [](const auto& oldDim, const auto& dimIndices) {
-                const auto stop = !std::holds_alternative<std::int64_t>(dimIndices.stop)
-                                      ? oldDim
-                                      : std::get<std::int64_t>(dimIndices.stop);
-                const auto start = !std::holds_alternative<std::int64_t>(dimIndices.start)
-                                       ? 0
-                                       : std::get<std::int64_t>(dimIndices.start);
-                const auto step = !std::holds_alternative<std::int64_t>(dimIndices.step)
-                                      ? 1
-                                      : std::get<std::int64_t>(dimIndices.step);
+                const auto stop = dimIndices.stop.value_or(oldDim);
+                const auto start = dimIndices.start.value_or(0);
+                const auto step = dimIndices.step.value_or(1);
                 return (stop - start + step - 1) / step;
             });
 
         // find the new start position to be able to determine the new buffer offset
         std::vector<std::int64_t> startPos(m_dimensions.size());
         std::transform(cbegin(indices), cend(indices), begin(startPos), [](const auto& dimIndices) {
-            return !std::holds_alternative<std::int64_t>(dimIndices.start)
-                       ? 0
-                       : std::get<std::int64_t>(dimIndices.start);
+            return dimIndices.start.value_or(0);
         });
 
         // now determine the new buffer offset
@@ -112,9 +94,7 @@ public:
         std::vector<std::ptrdiff_t> newStrides(m_dimensions.size());
         std::transform(cbegin(m_strides), cend(m_strides), cbegin(indices), begin(newStrides),
                        [](const auto& dimStride, const auto& dimIndices) {
-                           return dimStride * (!std::holds_alternative<std::int64_t>(dimIndices.step)
-                                                   ? 1
-                                                   : std::get<std::int64_t>(dimIndices.step));
+                           return dimStride * dimIndices.step.value_or(1);
                        });
 
         return {m_data, newOffset, newDimensions, newStrides};
@@ -144,7 +124,7 @@ private:
     friend Tensor arange(int);
 };
 
-[[nodiscard]] Tensor arange(int end)
+[[nodiscard]] inline Tensor arange(int end)
 {
     auto data = std::make_shared<detail::TensorData>(
         std::vector<float>(end), std::vector<std::int64_t>{static_cast<std::int64_t>(end)});
