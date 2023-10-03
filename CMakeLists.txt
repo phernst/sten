@@ -3,6 +3,7 @@ project(sten)
 
 set(SRC_FILES
     main.cpp
+    sten.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SRC_FILES})
