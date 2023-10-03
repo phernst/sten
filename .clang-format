@@ -1,0 +1,14 @@
+UseTab: Never 
+IndentWidth: 4 
+AllowShortIfStatementsOnASingleLine: false 
+AllowShortFunctionsOnASingleLine: false 
+ColumnLimit: 0 
+ConstructorInitializerAllOnOneLineOrOnePerLine: false 
+ConstructorInitializerIndentWidth: 0 
+AccessModifierOffset: -4 
+BreakBeforeBraces: Linux 
+BreakConstructorInitializers: BeforeComma 
+AllowShortCaseLabelsOnASingleLine: true 
+IndentCaseLabels: true 
+PointerAlignment: Left
+
